@@ -1,0 +1,42 @@
+---
+services:
+  traefik:
+    image: traefik
+    container_name: traefik
+    command: >
+      --api.insecure=true 
+      --providers.docker
+      --providers.docker.exposedbydefault=false
+      --accesslog=true
+      --entrypoints.eda.address=:80
+      #--log.level=DEBUG
+    ports:
+      - 80:80
+      - 8080:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+  kentik-eda:
+    #scale: 2
+    image: kentik-eda:0.1
+    container_name: kentik-eda
+    depends_on:
+      - traefik
+    build:
+      context: .
+    volumes:
+      - ${PWD}/eda:/app
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    env_file:
+      - .env
+        
+    ports:
+      - 8080
+    command: bash -c "ansible-rulebook --rulebook rules.yml -i ./ansible-inventory.yml --vars eda_vars.yml"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.eda.rule=Host(`kentik.eda`) && Path(`/eda`)"      
+      - "traefik.http.routers.eda.middlewares=eda-ratelimit,eda-path"
+      - "traefik.http.middlewares.eda-path.replacepath.path=/alert"
+      - "traefik.http.middlewares.eda-ratelimit.ratelimit.average=10"
+      - "traefik.http.middlewares.eda-ratelimit.ratelimit.burst=50"
+      - "traefik.http.routers.eda.entrypoints=eda"

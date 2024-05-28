@@ -1,0 +1,9 @@
+---
+- name: New Event Received
+  gather_facts: no
+  hosts: localhost
+  tasks:
+    - name: Dump Event Payload
+      ansible.builtin.debug:
+        var: ansible_eda.event.payload
+        verbosity: 0

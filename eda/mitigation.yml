@@ -1,0 +1,79 @@
+---
+- name: "::HANDLE MITIGATION EVENT::"
+  gather_facts: no
+  hosts: localhost
+  vars_files: eda_vars.yml
+  tasks:
+    - name: START - NEW MITIGATION STARTING
+      block: 
+      
+      - name: START::IS TELEGRAF RUNNING
+        community.docker.docker_container_info:
+          name: telegraf-eda
+        register: result
+     
+      - name: START::GENERATE TELEGRAF CONFIG
+        ansible.builtin.template:
+          src: /app/telegraf/telegraf.conf.j2
+          dest: /app/telegraf/telegraf.conf
+        when: not result.exists|bool      
+      
+      - name: START::BRING UP CONTAINER
+        community.docker.docker_container:
+          name: telegraf-eda
+          image: telegraf:latest
+          state: started
+          volumes:
+            - "/home/manolis/projects/kentik-eda/eda/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf"
+          env:
+            KENTIK_API_EMAIL: "{{ lookup('ansible.builtin.env', 'KENTIK_API_EMAIL')}}"
+            KENTIK_API_TOKEN: "{{ lookup('ansible.builtin.env', 'KENTIK_API_TOKEN')}}"
+            GRPC_USERNAME: "{{ lookup('ansible.builtin.env', 'GRPC_USERNAME')}}"
+            GRPC_PASSWORD: "{{ lookup('ansible.builtin.env', 'GRPC_PASSWORD')}}"
+        when: not result.exists|bool      
+      
+      when: "'mitigating' in ansible_eda.event.payload.MitigationState|lower and 
+            'mitigating' in ansible_eda.event.payload.MitigationStateNew|lower"
+    
+    - name: MITIGATION FINISHED
+      block: 
+      
+      - name: STOP::GET ACTIVE ALERTS FROM KENTIK
+        ansible.builtin.uri:
+         url: https://api.kentik.eu/api/v5/alerts-active/alarms
+         method: GET
+         http_agent: ansible-eda-httpget
+         headers:
+           X-CH-Auth-API-Token: "{{ lookup('ansible.builtin.env', 'KENTIK_API_TOKEN')}}" 
+           X-CH-Auth-Email: "{{ lookup('ansible.builtin.env', 'KENTIK_API_EMAIL')}}"
+        register: alerts
+
+      - name: STOP::CHECK KENTIK FOR ACTIVE MITIGATIONS
+        ansible.builtin.debug: 
+          msg: 
+            - "Current Active Mitigations on Platform ID#{{MitigationPlatformID}}: {{alerts.json | 
+               selectattr('mit_platform_id', 'match', ansible_eda.event.payload.MitigationPlatformID ) |
+              selectattr('alarm_state', 'search', 'MITIGATING') | length}}"
+                  
+      - name: STOP::REMOVE TELEGRAF CONTAINER
+        community.docker.docker_container:
+          name: telegraf-eda
+          state: absent
+
+        when: alerts.json | 
+              selectattr('mit_platform_id', 'match', ansible_eda.event.payload.MitigationPlatformID ) |
+              selectattr('alarm_state', 'search', 'MITIGATING') | length == 0
+      
+      when: "'archived' in ansible_eda.event.payload.MitigationState|lower and
+            'archived' in ansible_eda.event.payload.MitigationStateNew|lower"
+    
+
+
+
+
+
+
+
+
+
+        

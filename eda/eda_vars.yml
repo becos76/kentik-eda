@@ -1,0 +1,16 @@
+---
+CompanyID: <REDACTED>
+EventType: "mitigation"
+MitigationPlatformID: "257"
+ValidMitigationStates:
+    - "manualMitigating"
+    - "mitigating"
+    - "archived"
+Mitigation:
+    devices:
+        - name: "ath-pop1-xrv1"
+          ip: "10.12.255.1"
+          port: 57344
+        - name: "ath-pop1-xrv2"
+          ip: "10.13.255.1"
+          port: 57344

@@ -1,0 +1,64 @@
+[agent]
+  omit_hostname = true
+  debug = true
+  quiet = false
+
+[global_tags]
+  platform_id = "{{ MitigationPlatformID }}"
+
+[[inputs.gnmi]]
+  
+  addresses = [{% for device in Mitigation.devices %}"{{device.ip}}:{{device.port}}"{% if not loop.last %},{% endif %}{% endfor %}]
+  username = "${GRPC_USERNAME}"
+  password = "${GRPC_PASSWORD}"
+  redial = "10s"
+  encoding = "proto"
+  tls_enable = true
+  insecure_skip_verify = true
+
+[[inputs.gnmi.subscription]]
+  name = "/devices/xrv9000/flowspec"
+  origin = "Cisco-IOS-XR-flowspec-oper"
+  path = "/flow-spec/vrfs/vrf/afs/af/flows/flow/flow-statistics/"
+  subscription_mode = "sample"
+  sample_interval = "30s"
+
+[[processors.rename]]
+  [[processors.rename.replace]]
+    tag = "source"
+    dest = "device_ip"
+
+[[processors.override]]
+  [processors.override.tagpass]
+    vrf_name = [""]
+  [processors.override.tags]
+    vrf_name = "default"
+
+[[processors.starlark]]
+  source='''
+lookup = {
+{% for device in Mitigation.devices %}
+  "{{ device.ip }}": "{{ device.name }}",
+{% endfor %}} 
+def apply(metric):
+    if metric.tags['device_ip'] and metric.tags['device_ip'] in lookup:
+       metric.tags['device_name'] = lookup[metric.tags['device_ip']]
+    return metric
+'''
+
+[[outputs.file]]
+  files = ["stdout"]
+  data_format = "influx"
+  influx_sort_fields = false
+  tagexclude = ["path"]
+
+[[outputs.http]]
+  url = "{{ lookup('env', 'KENTIK_API_ENDPOINT')}}"
+  data_format = "influx"
+  influx_sort_fields = false
+  tagexclude = ["path"]
+
+  [outputs.http.headers]
+    Content-Type = "application/influx"
+    X-CH-Auth-Email = "${KENTIK_API_EMAIL}"
+    X-CH-Auth-API-Token = "${KENTIK_API_TOKEN}"

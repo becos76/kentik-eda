@@ -1,0 +1,9 @@
+---
+- name: Bring Up A Container
+  gather_facts: no
+  hosts: localhost
+  tasks:
+    - name: Start Container
+      community.docker.docker_container:
+        name: nginx
+        image: nginx

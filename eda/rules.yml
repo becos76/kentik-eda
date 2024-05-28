@@ -1,0 +1,45 @@
+---
+- name: Listening for Webhook Events
+  hosts: localhost
+  sources:
+    - kentik.ansible_eda.kentik_webhook:
+        host: 0.0.0.0
+        port: 8080
+  rules:
+    - name: R1 - New Event Received
+      # If it is a valid start or stop mitigation event
+      condition: event.payload is defined and
+                 event.payload.CompanyID == vars.CompanyID and
+                 event.payload.EventType == vars.EventType and
+                 event.payload.MitigationPlatformID == vars.MitigationPlatformID and
+                 event.payload.MitigationState in vars.ValidMitigationStates and
+                 event.payload.MitigationStateNew in vars.ValidMitigationStates
+      actions:
+        - debug:
+            msg: |
+              New {{event.payload.MitigationType}}/{{event.payload.MitigationState}} event received
+              ID: {{event.payload.MitigationID}}
+              Platform: {{event.payload.MitigationPlatformName}}
+              Method: {{event.payload.MitigationMethodName}}
+              IP: {{event.payload.MitigationAlertIP}}            
+
+        # DEBUG:Dump the event
+        #- print_event:
+        #    pretty: true
+
+        # Call the pb to handle the mitigation event
+        - run_playbook:
+            name: mitigation.yml               
+            
+    # Catch and ignore the rest
+    - name: R2 - Not taking action
+      condition: event.meta is defined
+      action:
+        debug:
+          msg: 
+            - "Ignoring {{event.payload.EventType}} event"
+          
+            
+        
+        
+        
